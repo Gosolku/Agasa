@@ -602,6 +602,92 @@
 </style>
 </head>
 <body>
+<style id="login-styles">
+  .login-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, #0e0b08 0%, #1a1410 100%);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 99999; font-family: "Inter", system-ui, sans-serif;
+  }
+  .login-overlay.hidden { display: none; }
+  .login-box {
+    background: rgba(28,22,17,.8); backdrop-filter: blur(10px);
+    border: 1px solid rgba(220,180,130,.2); border-radius: 18px;
+    padding: 48px; width: 100%; max-width: 320px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.3);
+  }
+  .login-box h1 {
+    font-size: 24px; font-weight: 600; color: #efe7db;
+    margin: 0 0 28px; text-align: center;
+    font-family: "Fraunces", serif;
+  }
+  .login-box input {
+    width: 100%; padding: 12px 16px; margin-bottom: 16px;
+    background: rgba(16,12,9,.7); border: 1px solid rgba(220,180,130,.2);
+    border-radius: 8px; color: #efe7db; font-size: 14px;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .login-box input::placeholder { color: rgba(189,174,155,.5); }
+  .login-box input:focus {
+    outline: none; border-color: #e6ad6b;
+    box-shadow: 0 0 0 2px rgba(230,173,107,.1);
+  }
+  .login-box button {
+    width: 100%; padding: 12px 16px; background: #e6ad6b;
+    border: none; border-radius: 8px; color: #0e0b08;
+    font-weight: 600; font-size: 14px; cursor: pointer;
+    font-family: "Inter", system-ui, sans-serif;
+    transition: background .2s;
+  }
+  .login-box button:hover { background: #f4cd92; }
+  .login-box .error {
+    color: #c76f50; font-size: 12px; margin-bottom: 12px; text-align: center;
+  }
+</style>
+<div id="login-overlay" class="login-overlay">
+  <div class="login-box">
+    <h1>Study OS</h1>
+    <div id="error-msg" class="error"></div>
+    <input id="password-input" type="password" placeholder="Password" autocomplete="off" />
+    <button onclick="checkPassword()">Enter</button>
+  </div>
+</div>
+<script>
+  const CORRECT_PASSWORD = "kusolGO123";
+  const SESSION_KEY = "agasa_session";
+  
+  function checkPassword() {
+    const input = document.getElementById("password-input").value;
+    const error = document.getElementById("error-msg");
+    
+    if (input === CORRECT_PASSWORD) {
+      localStorage.setItem(SESSION_KEY, "authenticated");
+      hideLogin();
+    } else {
+      error.textContent = "Incorrect password";
+      document.getElementById("password-input").value = "";
+    }
+  }
+  
+  function hideLogin() {
+    document.getElementById("login-overlay").classList.add("hidden");
+  }
+  
+  function checkAuth() {
+    if (localStorage.getItem(SESSION_KEY) !== "authenticated") {
+      document.getElementById("login-overlay").classList.remove("hidden");
+    } else {
+      hideLogin();
+    }
+  }
+  
+  document.getElementById("password-input").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") checkPassword();
+  });
+  
+  checkAuth();
+</script>
+
 <div class="bg-blur"></div>
 <div id="veil"></div>
 <div id="spotlight"></div>
