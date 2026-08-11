@@ -41,6 +41,7 @@
   .msg{ padding:8px 12px; border-radius:10px; max-width:85%; white-space:pre-wrap; word-break:break-word; }
   .msg.user{ align-self:flex-end; background:rgba(230,173,107,.16); }
   .msg.bot{ align-self:flex-start; background:rgba(255,255,255,.06); }
+  #chat-usage{ padding:7px 12px; font-size:11px; letter-spacing:.02em; color:rgba(241,230,216,.55); border-bottom:1px solid rgba(230,173,107,.14); }
   #chat-form{ display:flex; border-top:1px solid rgba(230,173,107,.14); }
   #chat-input{ flex:1; background:transparent; border:0; padding:10px 12px; color:#f1e6d8; font:inherit; outline:none; }
   #chat-input::placeholder{ color:rgba(241,230,216,.4); }
@@ -56,6 +57,7 @@
 <div id="tod"></div>
 
 <div id="chat">
+  <div id="chat-usage">loading usage…</div>
   <div id="chat-log"></div>
   <form id="chat-form">
     <input id="chat-input" type="text" placeholder="Ask something…" autocomplete="off" />
@@ -88,6 +90,7 @@
     const log = document.getElementById("chat-log");
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
+    const usageEl = document.getElementById("chat-usage");
     const history = [];
 
     function addMsg(role, text){
@@ -98,6 +101,17 @@
       log.scrollTop = log.scrollHeight;
       return el;
     }
+
+    function showUsage(usage){
+      if (!usage) return;
+      usageEl.textContent = `${usage.used} / ${usage.limit} today`;
+      if (usage.used >= usage.limit) usageEl.textContent += " — out for today";
+    }
+
+    fetch("/api/usage")
+      .then(r => r.json())
+      .then(showUsage)
+      .catch(() => { usageEl.textContent = "usage unavailable"; });
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -118,6 +132,7 @@
         const data = await res.json();
         pending.textContent = data.reply || data.error || "Something went wrong.";
         history.push({ role: "assistant", text: pending.textContent });
+        showUsage(data.usage);
       } catch (err) {
         pending.textContent = "Network error.";
       }

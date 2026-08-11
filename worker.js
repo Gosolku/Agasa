@@ -25,10 +25,33 @@ export default {
     if (url.pathname === "/api/chat" && request.method === "POST") {
       return handleChat(request, env);
     }
+    if (url.pathname === "/api/usage" && request.method === "GET") {
+      return json(await getUsage(env));
+    }
 
     return env.ASSETS.fetch(request);
   },
 };
+
+// Gemini's free tier for gemini-flash-latest, as documented — not pulled live
+// from Google (they don't expose a quota-check endpoint), so this is our own
+// count of requests we've made today, not an authoritative number from them.
+const DAILY_LIMIT = 1500;
+
+async function getUsage(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  const used = parseInt((await env.USAGE.get(`usage:${day}`)) || "0", 10);
+  return { used, limit: DAILY_LIMIT, day };
+}
+
+async function incrementUsage(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `usage:${day}`;
+  const used = parseInt((await env.USAGE.get(key)) || "0", 10) + 1;
+  // expire after 2 days — no cleanup needed, and tomorrow's key starts fresh
+  await env.USAGE.put(key, String(used), { expirationTtl: 172800 });
+  return { used, limit: DAILY_LIMIT, day };
+}
 
 async function handleChat(request, env) {
   if (!env.GEMINI_API_KEY) {
@@ -58,6 +81,8 @@ async function handleChat(request, env) {
     { role: "user", parts: [{ text: message }] },
   ];
 
+  const usage = await incrementUsage(env);
+
   let geminiRes;
   try {
     geminiRes = await fetch(
@@ -74,7 +99,7 @@ async function handleChat(request, env) {
 
   if (!geminiRes.ok) {
     const detail = await geminiRes.text().catch(() => "");
-    return json({ error: "Gemini request failed.", detail }, 502);
+    return json({ error: "Gemini request failed.", detail, usage }, 502);
   }
 
   const data = await geminiRes.json();
@@ -82,7 +107,7 @@ async function handleChat(request, env) {
     data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ||
     "(no response)";
 
-  return json({ reply });
+  return json({ reply, usage });
 }
 
 function json(obj, status = 200) {
