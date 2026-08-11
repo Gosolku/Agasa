@@ -36,16 +36,28 @@ export default {
 // Gemini's free tier for gemini-flash-latest, as documented — not pulled live
 // from Google (they don't expose a quota-check endpoint), so this is our own
 // count of requests we've made today, not an authoritative number from them.
+// Only counts requests that go through this Worker with this key.
 const DAILY_LIMIT = 1500;
 
+// Google resets the real free-tier quota at midnight Pacific time, so the
+// counter has to key off the Pacific date, not UTC, to stay in sync.
+function pacificDateString(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 async function getUsage(env) {
-  const day = new Date().toISOString().slice(0, 10);
+  const day = pacificDateString();
   const used = parseInt((await env.USAGE.get(`usage:${day}`)) || "0", 10);
   return { used, limit: DAILY_LIMIT, day };
 }
 
 async function incrementUsage(env) {
-  const day = new Date().toISOString().slice(0, 10);
+  const day = pacificDateString();
   const key = `usage:${day}`;
   const used = parseInt((await env.USAGE.get(key)) || "0", 10) + 1;
   // expire after 2 days — no cleanup needed, and tomorrow's key starts fresh
