@@ -25,6 +25,27 @@
   @keyframes lampBreathe{ 0%,100%{ opacity:.82; } 50%{ opacity:1; } }
   #spotlight{ animation:lampBreathe 9s ease-in-out infinite; }
   @media (prefers-reduced-motion: reduce){ #spotlight{ animation:none !important; } }
+
+  /* chat */
+  #chat{
+    position:fixed; right:24px; bottom:24px; width:min(360px, calc(100vw - 48px));
+    max-height:60vh; display:flex; flex-direction:column;
+    background:rgba(20,15,11,.55); backdrop-filter:blur(14px) saturate(120%);
+    -webkit-backdrop-filter:blur(14px) saturate(120%);
+    border:1px solid rgba(230,173,107,.18); border-radius:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,.45); overflow:hidden;
+    font:14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color:#f1e6d8; z-index:10;
+  }
+  #chat-log{ flex:1 1 auto; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:120px; }
+  .msg{ padding:8px 12px; border-radius:10px; max-width:85%; white-space:pre-wrap; word-break:break-word; }
+  .msg.user{ align-self:flex-end; background:rgba(230,173,107,.16); }
+  .msg.bot{ align-self:flex-start; background:rgba(255,255,255,.06); }
+  #chat-form{ display:flex; border-top:1px solid rgba(230,173,107,.14); }
+  #chat-input{ flex:1; background:transparent; border:0; padding:10px 12px; color:#f1e6d8; font:inherit; outline:none; }
+  #chat-input::placeholder{ color:rgba(241,230,216,.4); }
+  #chat-form button{ border:0; background:rgba(230,173,107,.22); color:#f1e6d8; padding:0 16px; cursor:pointer; font:inherit; }
+  #chat-form button:hover{ background:rgba(230,173,107,.32); }
 </style>
 </head>
 <body>
@@ -33,6 +54,14 @@
 <div id="veil"></div>
 <div id="spotlight"></div>
 <div id="tod"></div>
+
+<div id="chat">
+  <div id="chat-log"></div>
+  <form id="chat-form">
+    <input id="chat-input" type="text" placeholder="Ask something…" autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+</div>
 
 <script>
   /* ambient: mouse-tracked spotlight */
@@ -51,6 +80,49 @@
   function paintTint(){ document.getElementById("tod").style.background = tint(new Date().getHours()); }
   paintTint();
   setInterval(paintTint, 5*60*1000);
+</script>
+
+<script>
+  /* chat: talks to /api/chat, which is proxied to Gemini by worker.js */
+  (function(){
+    const log = document.getElementById("chat-log");
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("chat-input");
+    const history = [];
+
+    function addMsg(role, text){
+      const el = document.createElement("div");
+      el.className = "msg " + (role === "user" ? "user" : "bot");
+      el.textContent = text;
+      log.appendChild(el);
+      log.scrollTop = log.scrollHeight;
+      return el;
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      addMsg("user", text);
+      const turnHistory = history.slice();
+      history.push({ role: "user", text });
+      const pending = addMsg("bot", "…");
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: text, history: turnHistory }),
+        });
+        const data = await res.json();
+        pending.textContent = data.reply || data.error || "Something went wrong.";
+        history.push({ role: "assistant", text: pending.textContent });
+      } catch (err) {
+        pending.textContent = "Network error.";
+      }
+    });
+  })();
 </script>
 
 </body>

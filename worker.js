@@ -21,9 +21,76 @@ export default {
       });
     }
 
+    const url = new URL(request.url);
+    if (url.pathname === "/api/chat" && request.method === "POST") {
+      return handleChat(request, env);
+    }
+
     return env.ASSETS.fetch(request);
   },
 };
+
+async function handleChat(request, env) {
+  if (!env.GEMINI_API_KEY) {
+    return json({ error: "GEMINI_API_KEY not configured." }, 500);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON." }, 400);
+  }
+
+  const message = typeof body.message === "string" ? body.message.slice(0, 4000) : "";
+  if (!message.trim()) {
+    return json({ error: "Empty message." }, 400);
+  }
+
+  // Keep only the last few turns — this is a test chat, not a full memory system.
+  const history = Array.isArray(body.history) ? body.history.slice(-20) : [];
+
+  const contents = [
+    ...history.map((m) => ({
+      role: m && m.role === "assistant" ? "model" : "user",
+      parts: [{ text: String((m && m.text) || "").slice(0, 4000) }],
+    })),
+    { role: "user", parts: [{ text: message }] },
+  ];
+
+  let geminiRes;
+  try {
+    geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ contents }),
+      }
+    );
+  } catch {
+    return json({ error: "Could not reach Gemini." }, 502);
+  }
+
+  if (!geminiRes.ok) {
+    const detail = await geminiRes.text().catch(() => "");
+    return json({ error: "Gemini request failed.", detail }, 502);
+  }
+
+  const data = await geminiRes.json();
+  const reply =
+    data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ||
+    "(no response)";
+
+  return json({ reply });
+}
+
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 function constantTimeEqual(a, b) {
   const bufA = new TextEncoder().encode(a);
