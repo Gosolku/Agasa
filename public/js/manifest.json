@@ -1,0 +1,236 @@
+{
+  "version": 3,
+  "note": "Single source of truth for the tool layer. The Worker imports this file at build time (wrangler bundles the JSON) to build Gemini's function declarations; the browser fetches it at runtime to bind handlers. Both sides read the same bytes, so a tool cannot be declared to the model without the interface knowing about it. `handler` names a function in public/js/registry.js; `capability` must exist in src/permissions.config.js or the call is denied by the fallback.",
+
+  "modules": [
+    {
+      "id": "timer",
+      "label": "Timer",
+      "summary": "A countdown for focused work. Use for anything time-boxed, and for 'remind me in N minutes' — nothing here runs while the tab is shut, so a visible countdown is the honest version of a reminder.",
+      "params": { "minutes": "number", "label": "string" }
+    },
+    {
+      "id": "checklist",
+      "label": "Checklist",
+      "summary": "A persistent list of tasks the user ticks off. Survives closing the stage and starting a new session.",
+      "params": { "title": "string", "items": "string[]" }
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "ui_theme_set",
+      "capability": "ui.theme",
+      "side": "client",
+      "handler": "themeSet",
+      "declaration": {
+        "name": "ui_theme_set",
+        "description": "Switch the interface between the dark and light theme. Use when the user asks directly, or when they mention glare, eye strain or the time of day in a way that clearly implies it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["dark", "light", "toggle"],
+              "description": "Target theme. 'toggle' flips whichever is active."
+            }
+          },
+          "required": ["mode"]
+        }
+      }
+    },
+    {
+      "name": "ui_session_new",
+      "capability": "ui.session",
+      "side": "client",
+      "handler": "sessionNew",
+      "declaration": {
+        "name": "ui_session_new",
+        "description": "Start a fresh conversation session, optionally titled. The current session is kept and stays in the sessions rail. Use when the user changes subject decisively and wants a clean slate — not for every new question.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Title for the new session. Omit to let it be named after the first message."
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "ui_session_switch",
+      "capability": "ui.session",
+      "side": "client",
+      "handler": "sessionSwitch",
+      "declaration": {
+        "name": "ui_session_switch",
+        "description": "Switch to an existing session by its id. Session ids and titles are supplied in the interface state; never guess one.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Session id to switch to." }
+          },
+          "required": ["id"]
+        }
+      }
+    },
+    {
+      "name": "ui_session_clear",
+      "capability": "ui.session",
+      "side": "client",
+      "handler": "sessionClear",
+      "declaration": {
+        "name": "ui_session_clear",
+        "description": "Delete every turn in the current session, leaving it empty. This cannot be undone, so only call it when the user has clearly asked.",
+        "parameters": { "type": "object", "properties": {} }
+      }
+    },
+    {
+      "name": "ui_stage_open",
+      "capability": "ui.stage",
+      "side": "client",
+      "handler": "stageOpen",
+      "declaration": {
+        "name": "ui_stage_open",
+        "description": "Mount a module in the view stage — the panel beside or over the conversation. This is how you put a working surface in front of the user instead of describing one. Opening a module that is already open re-applies the parameters rather than reloading it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": ["timer", "checklist"],
+              "description": "'timer' — a countdown for focused work. 'checklist' — a persistent list of tasks."
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["split", "full"],
+              "description": "'split' keeps the conversation visible alongside and is the right default. 'full' hides it — only when the module IS the task."
+            },
+            "params": {
+              "type": "object",
+              "description": "Module setup. timer: { minutes, label }. checklist: { title, items }.",
+              "properties": {
+                "minutes": { "type": "number" },
+                "label": { "type": "string" },
+                "title": { "type": "string" },
+                "items": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "required": ["module"]
+        }
+      }
+    },
+    {
+      "name": "ui_stage_close",
+      "capability": "ui.stage",
+      "side": "client",
+      "handler": "stageClose",
+      "declaration": {
+        "name": "ui_stage_close",
+        "description": "Unmount whatever is in the view stage and give the full width back to the conversation. The module's state is discarded.",
+        "parameters": { "type": "object", "properties": {} }
+      }
+    },
+    {
+      "name": "ui_notify",
+      "capability": "ui.notify",
+      "side": "client",
+      "handler": "notify",
+      "declaration": {
+        "name": "ui_notify",
+        "description": "Show a brief toast at the bottom of the screen. For confirmations and small asides that do not deserve a paragraph. It disappears on its own, so never put anything in it the user needs to keep.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string", "description": "One short line, 60 characters or fewer." },
+            "tone": { "type": "string", "enum": ["neutral", "good", "warn"], "description": "Defaults to neutral." }
+          },
+          "required": ["text"]
+        }
+      }
+    },
+    {
+      "name": "ui_dialog_open",
+      "capability": "ui.dialog",
+      "side": "client",
+      "handler": "dialogOpen",
+      "declaration": {
+        "name": "ui_dialog_open",
+        "description": "Open a modal dialog with a title, a markdown body, and up to three buttons. Returns which button was pressed, so this is how you ask a question that needs a definite answer rather than a typed reply. It blocks the interface — never use it for something the user could simply read in the thread.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "description": "Short dialog heading." },
+            "body": { "type": "string", "description": "Dialog body. Markdown is rendered." },
+            "choices": {
+              "type": "array",
+              "description": "Button labels in order; the first is the default. Omit for a single 'Close' button.",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["title", "body"]
+        }
+      }
+    },
+    {
+      "name": "ui_console_write",
+      "capability": "ui.console",
+      "side": "client",
+      "handler": "consoleWrite",
+      "declaration": {
+        "name": "ui_console_write",
+        "description": "Write a block into the thread marked as coming from the console rather than from you, excluded from future context. For reference material the user wants on screen but which should not clutter the conversation the model sees — a table, a checklist, a long extract.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "markdown": { "type": "string", "description": "Content to render." }
+          },
+          "required": ["markdown"]
+        }
+      }
+    },
+    {
+      "name": "progress_write",
+      "capability": "progress.write",
+      "side": "server",
+      "handler": "progressWrite",
+      "declaration": {
+        "name": "progress_write",
+        "description": "Record a durable fact about the user or their work, available in every future conversation. Use for goals, deadlines, standing preferences and running counts — anything that will still matter next week. Not for the content of this conversation, which is already saved. Writing to an existing key replaces it.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "Dotted lower-case identifier, e.g. 'chess.rating', 'revision.deadline'. Reuse an existing key when updating rather than inventing a near-duplicate."
+            },
+            "value": {
+              "type": "string",
+              "description": "The fact, stated in full so it makes sense read cold with no surrounding conversation."
+            }
+          },
+          "required": ["key", "value"]
+        }
+      }
+    },
+    {
+      "name": "progress_delete",
+      "capability": "progress.write",
+      "side": "server",
+      "handler": "progressDelete",
+      "declaration": {
+        "name": "progress_delete",
+        "description": "Forget a recorded fact. Use when it has become wrong or the user asks you to drop it — a stale fact injected into every future request is worse than no fact.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "key": { "type": "string", "description": "The key to remove." }
+          },
+          "required": ["key"]
+        }
+      }
+    }
+  ]
+}

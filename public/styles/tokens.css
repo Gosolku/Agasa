@@ -1,0 +1,94 @@
+/* ═══ Agasa — design tokens ═══════════════════════════════════════
+   Palette: "slate & signal". Five carrying colours.
+
+     ground   near-black. Not #000: a flat true black makes every raised
+              plane above it look like it is floating in nothing, and on OLED
+              it smears when the thread scrolls. This is black with just
+              enough blue left in it to hold an edge.
+     surface  raised planes: rail, composer, stage, code. Separated from
+              ground by about the smallest step that still reads as a step.
+     ink      warm bone rather than white, so long prose reads as paper
+              under lamplight instead of a backlit spreadsheet.
+     iris     the interactive colour. Focus, send, active session, links.
+     kelp     the *system truth* colour — connected, streaming, done. Only
+              ever appears in mono text and 1px indicators, never as fill,
+              which is what keeps status legible as status.
+
+   alert is semantic-only (errors). It is not part of the brand and never
+   decorates anything.
+
+   Type: Literata for conversation — a screen-reading serif with warmth and
+   a bit of grit. IBM Plex Mono for everything the machine says about itself:
+   status line, slash commands, labels, code, numbers.
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ground:     #07090b;
+  --surface:    #0d1014;
+  --surface-2:  #14181d;
+  --ink:        #e7e3db;
+  --iris:       #7c7bff;
+  --kelp:       #46a98c;
+  --alert:      #c7554f;
+
+  --ink-dim:    #8d97a2;
+  --ink-faint:  #5a636d;
+  --line:       #1a1f25;
+  --line-bright:#272e36;
+  --iris-wash:  rgba(124, 123, 255, 0.13);
+  --iris-edge:  rgba(124, 123, 255, 0.42);
+  --kelp-wash:  rgba(70, 169, 140, 0.14);
+  --alert-wash: rgba(199, 85, 79, 0.13);
+  --scrim:      rgba(6, 10, 14, 0.72);
+  --shadow:     0 24px 60px -28px rgba(0, 0, 0, 0.9);
+
+  --conv: "Literata", Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --sys:  "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --fs-conv:  16.5px;
+  --fs-sys:   12px;
+  --fs-micro: 10.5px;
+  --lh-conv:  1.62;
+
+  /* Absolute, not ch: the column is shared by the serif conversation, the
+     mono status line and the slash menu, and `ch` would resolve against each
+     of their own fonts — leaving three "equal" widths that don't line up. */
+  --measure: 44rem;
+  --rail:    266px;
+  /* Wide enough for a module to be usable, narrow enough that the
+     conversation beside it keeps a readable line length. */
+  --stage-width: 42%;
+
+  /* Motion is for state changes only: something arrived, something opened,
+     something is now connected. Nothing here loops or floats for effect. */
+  --quick: 120ms;
+  --base:  200ms;
+  --slow:  340ms;
+  --ease:  cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --radius:    10px;
+  --radius-sm: 6px;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --ground:     #f0f1ee;
+  --surface:    #f8f8f5;
+  --surface-2:  #eceded;
+  --ink:        #17212b;
+  --iris:       #4a48d0;
+  --kelp:       #2c7b64;
+  --alert:      #a93b35;
+
+  --ink-dim:    #5a6875;
+  --ink-faint:  #8b98a4;
+  --line:       #dcdedb;
+  --line-bright:#c4c8c5;
+  --iris-wash:  rgba(74, 72, 208, 0.09);
+  --iris-edge:  rgba(74, 72, 208, 0.34);
+  --kelp-wash:  rgba(44, 123, 100, 0.11);
+  --alert-wash: rgba(169, 59, 53, 0.09);
+  --scrim:      rgba(30, 36, 42, 0.42);
+  --shadow:     0 24px 60px -30px rgba(30, 40, 50, 0.36);
+  color-scheme: light;
+}
