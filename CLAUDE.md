@@ -58,6 +58,9 @@ Nothing is pushed unless asked.
 - **Tool names are whitelisted, never interpolated.** Module ids likewise —
   `import('./modules/' + id + '.js')` would turn a tool argument into a code
   path.
-- **Free tier is 1500 requests/day**, counted in KV against a Pacific-midnight
-  reset. Every tool hop is a request. Context that grows without limit spends
-  the budget on remembering rather than answering.
+- **Free tier is 20 requests/day and 5/minute**, confirmed against AI Studio
+  for Gemini 3.6 Flash (what `gemini-flash-latest` resolves to). Counted in KV
+  against a Pacific-midnight reset. Every tool hop is a separate request, so a
+  message that triggers a tool costs at least two and the usable budget is
+  nearer seven messages a day. This is the binding constraint on the whole
+  design — treat a saved request as the scarce resource, not tokens.
