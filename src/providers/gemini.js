@@ -59,7 +59,13 @@ export const gemini = {
       const detail = await res.text().catch(() => "");
       yield {
         type: "error",
-        message: `Gemini refused the request (${res.status}).`,
+        message:
+          res.status === 429
+            ? "Out of Gemini quota for now."
+            : `Gemini refused the request (${res.status}).`,
+        // Carried so the caller can tell a rejected request from a failed one
+        // without parsing the message it is about to show the user.
+        status: res.status,
         detail: extractApiMessage(detail),
       };
       return;
