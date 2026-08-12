@@ -89,12 +89,23 @@ export const PERMISSIONS = {
 
     /* ── memory ────────────────────────────────────────────────── */
     {
-      id: "progress.write",
+      id: "memory.facts",
       surface: "memory",
       label: "Remember and forget facts",
       detail:
         "Record durable notes about you and your work, and delete them again. " +
         "Anything stored is injected into every later conversation.",
+      decision: "allow",
+      risk: "low",
+      reversible: true,
+    },
+    {
+      id: "memory.summaries",
+      surface: "memory",
+      label: "Summarise past sessions",
+      detail:
+        "Condense a finished conversation into a few lines kept for 90 days, " +
+        "so old sessions stay available without their full transcripts.",
       decision: "allow",
       risk: "low",
       reversible: true,

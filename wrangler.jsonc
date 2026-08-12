@@ -15,6 +15,11 @@
       "simple": { "limit": 5, "period": 60 }
     }
   ],
+  // Long-term memory currently shares this namespace under `fact:` and
+  // `summary:` prefixes. To give it its own, run
+  //   npx wrangler kv namespace create agasa-memory
+  // and add the returned id here as a second entry bound to "MEMORY";
+  // src/memory.js prefers that binding and needs no code change.
   "kv_namespaces": [
     {
       "binding": "USAGE",

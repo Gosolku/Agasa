@@ -192,23 +192,23 @@
       }
     },
     {
-      "name": "progress_write",
-      "capability": "progress.write",
+      "name": "remember_fact",
+      "capability": "memory.facts",
       "side": "server",
-      "handler": "progressWrite",
+      "handler": "rememberFact",
       "declaration": {
-        "name": "progress_write",
-        "description": "Record a durable fact about the user or their work, available in every future conversation. Use for goals, deadlines, standing preferences and running counts — anything that will still matter next week. Not for the content of this conversation, which is already saved. Writing to an existing key replaces it.",
+        "name": "remember_fact",
+        "description": "Record a durable fact in long-term memory, available in every future conversation. Use for preferences, goals, deadlines, standing instructions about how to work, architectural decisions, and running counts — anything that will still matter next week. Not for the content of this conversation, which is already saved. Writing to an existing key replaces it. Prefer updating a fact over recording a second, nearly identical one.",
         "parameters": {
           "type": "object",
           "properties": {
             "key": {
               "type": "string",
-              "description": "Dotted lower-case identifier, e.g. 'chess.rating', 'revision.deadline'. Reuse an existing key when updating rather than inventing a near-duplicate."
+              "description": "Dotted lower-case identifier, at most four segments, e.g. 'prefs.tone', 'chess.rating', 'rules.commits', 'arch.storage'. Reuse an existing key when updating."
             },
             "value": {
               "type": "string",
-              "description": "The fact, stated in full so it makes sense read cold with no surrounding conversation."
+              "description": "The fact, stated in full so it makes sense read cold with no surrounding conversation. Include the reason where the reason is the useful part."
             }
           },
           "required": ["key", "value"]
@@ -216,19 +216,52 @@
       }
     },
     {
-      "name": "progress_delete",
-      "capability": "progress.write",
+      "name": "forget_fact",
+      "capability": "memory.facts",
       "side": "server",
-      "handler": "progressDelete",
+      "handler": "forgetFact",
       "declaration": {
-        "name": "progress_delete",
-        "description": "Forget a recorded fact. Use when it has become wrong or the user asks you to drop it — a stale fact injected into every future request is worse than no fact.",
+        "name": "forget_fact",
+        "description": "Remove a fact from long-term memory. Use when it has become wrong or the user asks you to drop it — a stale fact injected into every future request is worse than no fact at all.",
         "parameters": {
           "type": "object",
           "properties": {
-            "key": { "type": "string", "description": "The key to remove." }
+            "key": { "type": "string", "description": "The exact key to remove, as it appears in long-term memory." }
           },
           "required": ["key"]
+        }
+      }
+    },
+    {
+      "name": "summarise_session",
+      "capability": "memory.summaries",
+      "side": "server",
+      "handler": "saveSummary",
+      "declaration": {
+        "name": "summarise_session",
+        "description": "Condense a conversation into a few lines kept in long-term memory for 90 days, so it can be recalled later without its full transcript. Call this when a session reaches a natural end, when the user says they are done with a topic, or before starting a new session on a different subject. Write the summary yourself, in your own words — what was decided, what was left open, what would be needed to pick it up again. Do not summarise a session that has barely started.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "The id of the session being summarised, exactly as listed in the interface state."
+            },
+            "title": {
+              "type": "string",
+              "description": "A short name for the session, useful for finding it again later."
+            },
+            "summary": {
+              "type": "string",
+              "description": "Four or five lines at most. Decisions and open threads, not a transcript."
+            },
+            "topics": {
+              "type": "array",
+              "description": "Up to six short tags, for matching against a later question.",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["session_id", "title", "summary"]
         }
       }
     }
