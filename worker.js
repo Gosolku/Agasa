@@ -401,7 +401,14 @@ async function* conversation({ provider, env, system, turns, signal, hops }) {
     // The model's own turn has to go into the history exactly as it produced
     // it — text and calls together — or the functionResponse that follows has
     // nothing to attach to.
-    const assistantTurn = { role: "assistant", text, calls: resolved.map((c) => ({ name: c.name, args: c.args })) };
+    // The signature travels with the call all the way through the park in KV
+    // and back, because the model will not accept its own call returning
+    // without it.
+    const assistantTurn = {
+      role: "assistant",
+      text,
+      calls: resolved.map((c) => ({ name: c.name, args: c.args, signature: c.signature })),
+    };
     working = [...working, assistantTurn];
 
     if (!pending.length) {
@@ -452,6 +459,7 @@ function resolveCall(call) {
       id,
       name: call.name,
       args: call.args || {},
+      signature: call.signature || null,
       verdict: "deny",
       reason: `No tool named '${call.name}' exists.`,
     };
@@ -464,6 +472,7 @@ function resolveCall(call) {
     capability: tool.capability,
     side: tool.side,
     args: call.args || {},
+    signature: call.signature || null,
     verdict,
     reason:
       verdict === "deny"

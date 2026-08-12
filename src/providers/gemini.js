@@ -109,6 +109,11 @@ export const gemini = {
               calls.push({
                 name: String(part.functionCall.name),
                 args: part.functionCall.args || {},
+                // This model thinks before it calls, and the signature is its
+                // receipt for having done so. It has to be handed back with
+                // the call when the turn is replayed or the next request is
+                // rejected outright — see toContent() below.
+                signature: part.thoughtSignature || null,
               });
             }
           }
@@ -167,7 +172,13 @@ function toContent(turn) {
     const parts = [];
     if (turn.text) parts.push({ text: turn.text });
     for (const call of turn.calls || []) {
-      parts.push({ functionCall: { name: call.name, args: call.args || {} } });
+      const part = { functionCall: { name: call.name, args: call.args || {} } };
+      // Thinking models reject a replayed functionCall that arrives without
+      // the signature they issued with it: "Function call is missing a
+      // thought_signature". It is opaque to us and only has to survive the
+      // round trip intact, so it rides along on the turn and is put back here.
+      if (call.signature) part.thoughtSignature = call.signature;
+      parts.push(part);
     }
     return { role: "model", parts: parts.length ? parts : [{ text: "" }] };
   }
