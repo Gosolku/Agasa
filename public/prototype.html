@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<meta name="robots" content="noindex" />
+<title>Agasa — prototype harness</title>
+
+<style>
+  /* ═══ prototype harness ══════════════════════════════════════════
+     Standalone. Imports nothing from the app and is imported by
+     nothing — the point is to be able to break it without breaking
+     Agasa. Every value the brief pins down lives in :root or in the
+     CORE object in the module below, so tuning is one place.
+     ════════════════════════════════════════════════════════════════ */
+
+  :root {
+    --bg:          #000000;
+    --ray:         #ffffff;
+
+    --ink:         #ffffff;
+    --ink-dim:     #888888;
+
+    --rail-w:      360px;
+    --rail-bg:     rgba(10, 10, 10, 0.7);
+    --rail-blur:   blur(16px);
+    --rail-line:   rgba(255, 255, 255, 0.12);
+
+    --panel-bg:    rgba(15, 15, 15, 0.75);
+    --panel-blur:  blur(20px);
+    --panel-line:  rgba(255, 255, 255, 0.15);
+
+    --radius:      12px;
+    --ease:        cubic-bezier(0.16, 1, 0.3, 1);
+    --motion:      all 0.35s var(--ease);
+
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+            "Helvetica Neue", Arial, sans-serif;
+
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The core sits behind everything. Background lives on <body> and
+     nowhere else, so it propagates to the viewport canvas and a
+     negative-index child still paints on top of it. */
+  #core {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  /* ── chat rail ─────────────────────────────────────────────── */
+
+  .rail {
+    position: fixed;
+    left: 20px;
+    top: 20px;
+    bottom: 20px;
+    width: var(--rail-w);
+    display: flex;
+    flex-direction: column;
+    background: var(--rail-bg);
+    backdrop-filter: var(--rail-blur);
+    -webkit-backdrop-filter: var(--rail-blur);
+    border: 1px solid var(--rail-line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .rail__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--rail-line);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .rail__dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ray);
+    opacity: 0.9;
+  }
+
+  .stream {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+
+  .stream__empty {
+    margin: auto;
+    text-align: center;
+    color: var(--ink-dim);
+    font-size: 13px;
+  }
+
+  .turn { animation: rise 0.35s var(--ease) both; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .turn__who {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin-bottom: 6px;
+  }
+  .turn--user .turn__body {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--rail-line);
+    border-radius: 8px;
+    padding: 9px 12px;
+  }
+  .turn__body { color: var(--ink); }
+
+  .composer {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid var(--rail-line);
+  }
+  .composer input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--rail-line);
+    border-radius: 8px;
+    padding: 9px 12px;
+    outline: none;
+    transition: var(--motion);
+  }
+  .composer input::placeholder { color: var(--ink-dim); }
+  .composer input:focus {
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .composer button {
+    flex: 0 0 auto;
+    font: inherit;
+    color: var(--bg);
+    background: var(--ray);
+    border: 0;
+    border-radius: 8px;
+    padding: 0 16px;
+    cursor: pointer;
+    transition: var(--motion);
+  }
+  .composer button:hover { opacity: 0.85; }
+
+  /* ── stage ─────────────────────────────────────────────────── */
+
+  .stage {
+    position: fixed;
+    right: 20px;
+    top: 76px;
+    width: min(380px, calc(100vw - var(--rail-w) - 80px));
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    pointer-events: none;
+  }
+
+  .window {
+    background: var(--panel-bg);
+    backdrop-filter: var(--panel-blur);
+    -webkit-backdrop-filter: var(--panel-blur);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+    padding: 16px;
+    transition: var(--motion);
+    transform-origin: 80% 0%;
+
+    /* hidden is the resting state; the harness adds .is-open */
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+    pointer-events: none;
+  }
+  .window.is-open {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+  }
+
+  .window__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+
+  .timer__clock {
+    font-size: 44px;
+    font-weight: 200;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .timer__label { margin-top: 8px; color: var(--ink-dim); font-size: 13px; }
+  .timer__track {
+    margin-top: 16px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .timer__fill {
+    height: 100%;
+    width: 62%;
+    background: var(--ray);
+    transition: width 1s linear;
+  }
+
+  .check { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .check li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--motion);
+  }
+  .check li:hover { background: rgba(255, 255, 255, 0.05); }
+  .check .box {
+    flex: 0 0 auto;
+    width: 15px; height: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    color: var(--bg);
+    transition: var(--motion);
+  }
+  .check li[data-done="true"] .box { background: var(--ray); border-color: var(--ray); }
+  .check li[data-done="true"] .text { color: var(--ink-dim); text-decoration: line-through; }
+
+  /* ── dev toolbar ───────────────────────────────────────────── */
+
+  #prototype-controls {
+    position: fixed;
+    right: 20px;
+    top: 20px;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 6px;
+    background: var(--panel-bg);
+    backdrop-filter: var(--panel-blur);
+    -webkit-backdrop-filter: var(--panel-blur);
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+  }
+  #prototype-controls button {
+    font: inherit;
+    font-size: 12px;
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 6px 11px;
+    cursor: pointer;
+    transition: var(--motion);
+    white-space: nowrap;
+  }
+  #prototype-controls button:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+  #prototype-controls button[aria-pressed="true"] {
+    background: var(--ray);
+    border-color: var(--ray);
+    color: var(--bg);
+  }
+
+  @media (max-width: 880px) {
+    .rail { right: 20px; width: auto; bottom: 20px; }
+    .stage { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="core" aria-hidden="true"></canvas>
+
+<div id="prototype-controls" role="group" aria-label="Prototype controls">
+  <button type="button" id="btnMessage">Simulate Message</button>
+  <button type="button" id="btnTimer" aria-pressed="false">Toggle Timer</button>
+  <button type="button" id="btnChecklist" aria-pressed="false">Toggle Checklist</button>
+  <button type="button" id="btnClear">Clear Canvas</button>
+</div>
+
+<section class="rail" aria-label="Conversation">
+  <header class="rail__head">
+    <span class="rail__dot"></span>
+    Agasa · prototype
+  </header>
+
+  <div class="stream" id="stream" role="log" aria-label="Messages">
+    <p class="stream__empty" id="empty">No turns yet. Use <b>Simulate Message</b>.</p>
+  </div>
+
+  <form class="composer" id="composer">
+    <label class="sr-only" for="input" hidden>Message</label>
+    <input id="input" type="text" placeholder="Ask anything…" autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+</section>
+
+<div class="stage" aria-label="View stage">
+  <section class="window" id="winTimer" aria-hidden="true">
+    <div class="window__head"><span>Timer</span><span id="timerState">running</span></div>
+    <div class="timer__clock" id="timerClock">24:00</div>
+    <div class="timer__label">Focus block</div>
+    <div class="timer__track"><div class="timer__fill" id="timerFill"></div></div>
+  </section>
+
+  <section class="window" id="winChecklist" aria-hidden="true">
+    <div class="window__head"><span>Checklist</span><span id="checkCount">0/4</span></div>
+    <ul class="check" id="checkList">
+      <li data-done="false"><span class="box">✓</span><span class="text">Re-read the brief</span></li>
+      <li data-done="false"><span class="box">✓</span><span class="text">Sketch the core</span></li>
+      <li data-done="false"><span class="box">✓</span><span class="text">Tune the glow</span></li>
+      <li data-done="false"><span class="box">✓</span><span class="text">Screenshot it</span></li>
+    </ul>
+  </section>
+</div>
+
+<script type="module">
+/* ═══ the core ══════════════════════════════════════════════════════
+   A procedural iris: a dark pupil, a ring of rays reaching out to the
+   iris edge, and a drift of particles over the top. Monochrome by
+   construction — the only colours are the two below.
+
+   Rays are modulated by a small sum-of-sines field rather than a noise
+   library, which is cheap, deterministic and has no dependency. Glow is
+   built from stacked strokes under `lighter` compositing; shadowBlur at
+   this size costs more than the whole rest of the frame.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const CORE = {
+  background: '#000000',
+  ray:        '#ffffff',
+  pupil:      0.1,   // inner radius, as a share of the core radius
+  iris:       0.8,   // outer radius, same units
+  noise:      1.8,   // spatial frequency of the ray field
+  speed:      0.1,   // rotation, turns per second — deliberately slow
+  glow:       0.55,  // overall luminance ceiling
+};
+
+const RAYS = 240;
+const PARTICLES = 90;
+const TAU = Math.PI * 2;
+
+const canvas = document.getElementById('core');
+const ctx = canvas.getContext('2d', { alpha: true });
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let w = 0, h = 0, dpr = 1;
+let running = false;
+let frame = 0;
+let last = 0;
+let spin = 0;   // accumulated rotation, so speed changes never jump
+let drift = 0;  // accumulated particle phase
+
+const particles = Array.from({ length: PARTICLES }, (_, i) => ({
+  angle: (i / PARTICLES) * TAU + Math.random() * 0.4,
+  radius: 0.18 + Math.random() * 0.95,
+  size: 0.4 + Math.random() * 1.3,
+  rate: 0.25 + Math.random() * 0.8,
+  twinkle: Math.random() * TAU,
+}));
+
+function resize() {
+  dpr = Math.min(devicePixelRatio || 1, 1.5);
+  const nw = Math.max(1, Math.round(innerWidth * dpr));
+  const nh = Math.max(1, Math.round(innerHeight * dpr));
+  if (nw === w && nh === h) return;
+  w = nw; h = nh;
+  canvas.width = w; canvas.height = h;
+}
+
+/** Three octaves of sine, standing in for value noise. Smooth, seamless
+ *  around the circle because it only ever takes angle as input. */
+function field(angle, t) {
+  const k = CORE.noise;
+  return (
+    Math.sin(angle * 3 * k + t * 0.7) * 0.5 +
+    Math.sin(angle * 7 * k - t * 0.45) * 0.3 +
+    Math.sin(angle * 13 * k + t * 1.1) * 0.2
+  );
+}
+
+function draw() {
+  resize();
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = CORE.background;
+  ctx.fillRect(0, 0, w, h);
+
+  const cx = w * 0.5;
+  const cy = h * 0.5;
+  const base = Math.min(w, h) * 0.42;
+  const pupilR = base * CORE.pupil;
+  const irisR = base * CORE.iris;
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+
+  // ── rays
+  for (let i = 0; i < RAYS; i++) {
+    const a = (i / RAYS) * TAU + spin;
+    const n = field(a, drift);          // −1 … 1
+    const lift = 0.5 + 0.5 * n;         //  0 … 1
+
+    const inner = pupilR + base * 0.02;
+    const outer = inner + (irisR - inner) * (0.35 + lift * 0.65);
+
+    const x0 = cx + Math.cos(a) * inner;
+    const y0 = cy + Math.sin(a) * inner;
+    const x1 = cx + Math.cos(a) * outer;
+    const y1 = cy + Math.sin(a) * outer;
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+
+    // halo, then filament — two strokes of one path stand in for a blur
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.05 * CORE.glow * lift})`;
+    ctx.lineWidth = 5 * dpr;
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.42 * CORE.glow * lift})`;
+    ctx.lineWidth = 1 * dpr;
+    ctx.stroke();
+  }
+
+  // ── limbal ring, the edge the rays stop at
+  ctx.beginPath();
+  ctx.arc(cx, cy, irisR, 0, TAU);
+  ctx.strokeStyle = `rgba(255, 255, 255, ${0.22 * CORE.glow})`;
+  ctx.lineWidth = 1 * dpr;
+  ctx.stroke();
+
+  // ── particles
+  for (const p of particles) {
+    const a = p.angle + spin * p.rate * 2;
+    const r = irisR * p.radius;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    const alpha = (0.25 + 0.75 * (0.5 + 0.5 * Math.sin(drift * 1.6 + p.twinkle))) * CORE.glow * 0.55;
+
+    ctx.beginPath();
+    ctx.arc(x, y, p.size * dpr, 0, TAU);
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    ctx.fill();
+  }
+
+  // ── pupil, punched back out over the top
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(cx, cy, pupilR, 0, TAU);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.beginPath();
+  ctx.arc(cx, cy, pupilR, 0, TAU);
+  ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * CORE.glow})`;
+  ctx.lineWidth = 1 * dpr;
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function step(ms) {
+  if (!running) return;
+  frame = requestAnimationFrame(step);
+
+  const dt = last ? Math.min((ms - last) / 1000, 0.1) : 0.016;
+  last = ms;
+
+  spin += dt * CORE.speed * TAU;
+  drift += dt;
+  draw();
+}
+
+function start() {
+  if (running || reduced) return;
+  running = true;
+  last = 0;
+  frame = requestAnimationFrame(step);
+}
+
+function stop() {
+  running = false;
+  cancelAnimationFrame(frame);
+}
+
+// No point animating a background nobody is looking at.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stop(); else start();
+});
+
+addEventListener('resize', () => { if (!running) draw(); }, { passive: true });
+
+if (reduced) draw(); else start();
+
+/* ═══ the harness ═══════════════════════════════════════════════════ */
+
+const stream = document.getElementById('stream');
+const empty = document.getElementById('empty');
+
+const REPLIES = [
+  'Opening the timer on the stage. Twenty-four minutes.',
+  'Done — four items on the checklist, none ticked yet.',
+  'That is the iris at 0.8 with the pupil held at 0.1.',
+  'Switched the core to its slow rotation. Nothing else changed.',
+];
+let replyIndex = 0;
+
+function addTurn(who, text) {
+  if (empty) empty.remove();
+
+  const turn = document.createElement('div');
+  turn.className = `turn turn--${who}`;
+  turn.innerHTML = `<div class="turn__who">${who === 'user' ? 'You' : 'Agasa'}</div>`;
+
+  const body = document.createElement('div');
+  body.className = 'turn__body';
+  body.textContent = text;
+  turn.appendChild(body);
+
+  stream.appendChild(turn);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function simulate(prompt) {
+  addTurn('user', prompt || 'Put a timer on the stage for 24 minutes.');
+  const reply = REPLIES[replyIndex % REPLIES.length];
+  replyIndex += 1;
+  setTimeout(() => addTurn('agent', reply), 420);
+}
+
+function toggleWindow(win, button) {
+  const open = win.classList.toggle('is-open');
+  win.setAttribute('aria-hidden', String(!open));
+  button.setAttribute('aria-pressed', String(open));
+}
+
+const winTimer = document.getElementById('winTimer');
+const winChecklist = document.getElementById('winChecklist');
+const btnTimer = document.getElementById('btnTimer');
+const btnChecklist = document.getElementById('btnChecklist');
+
+document.getElementById('btnMessage').addEventListener('click', () => simulate());
+btnTimer.addEventListener('click', () => toggleWindow(winTimer, btnTimer));
+btnChecklist.addEventListener('click', () => toggleWindow(winChecklist, btnChecklist));
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  stream.replaceChildren();
+  const note = document.createElement('p');
+  note.className = 'stream__empty';
+  note.textContent = 'Cleared.';
+  stream.appendChild(note);
+});
+
+document.getElementById('composer').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  simulate(text);
+});
+
+/* ── mock module behaviour, so the windows are not just pictures ── */
+
+let remaining = 24 * 60;
+setInterval(() => {
+  if (!winTimer.classList.contains('is-open') || document.hidden) return;
+  remaining = remaining > 0 ? remaining - 1 : 24 * 60;
+  const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+  const s = String(remaining % 60).padStart(2, '0');
+  document.getElementById('timerClock').textContent = `${m}:${s}`;
+  document.getElementById('timerFill').style.width = `${(remaining / (24 * 60)) * 100}%`;
+}, 1000);
+
+const checkList = document.getElementById('checkList');
+const checkCount = document.getElementById('checkCount');
+
+checkList.addEventListener('click', (event) => {
+  const item = event.target.closest('li');
+  if (!item) return;
+  item.dataset.done = item.dataset.done === 'true' ? 'false' : 'true';
+  const done = checkList.querySelectorAll('[data-done="true"]').length;
+  checkCount.textContent = `${done}/${checkList.children.length}`;
+});
+</script>
+</body>
+</html>
