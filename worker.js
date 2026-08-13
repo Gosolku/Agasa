@@ -10,12 +10,17 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // The only pair of routes reachable without credentials.
+    // The only routes reachable without credentials.
     if (url.pathname === "/login") {
       if (request.method === "GET") return loginPage(url);
       if (request.method === "POST") return handleLogin(request, env, url);
       return new Response("Method not allowed.", { status: 405 });
     }
+
+    // The door stands on the same background as the room behind it, and the
+    // door is by definition seen before signing in. This one file is a shader
+    // taken from a public component library — it reveals nothing.
+    if (url.pathname === "/js/evil-eye.js") return env.ASSETS.fetch(request);
 
     const authorized =
       (await hasSession(request, env)) || hasBasicAuth(request, env);
@@ -177,19 +182,36 @@ function lockedOut(status, heading, detail, headers = {}, extra = "") {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="theme-color" content="#080b10" />
+<meta name="theme-color" content="#000000" />
 <title>Agasa</title>
 <style>
   :root { color-scheme: dark; }
+  /* Black on the root only: a background on body as well would paint over
+     the canvas, which sits at a negative z-index. */
+  html { background: #000000; }
   body {
     margin: 0; min-height: 100vh;
     display: grid; place-items: center;
     padding: 24px;
-    background: #080b10; color: #e6edf3;
+    color: #e6edf3;
     font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
     line-height: 1.6;
   }
-  main { max-width: 32rem; }
+  .backdrop {
+    position: fixed; inset: 0; z-index: -1;
+    display: block; width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  /* The eye is brightest dead centre, which is where this sits, so the panel
+     buys back the contrast the text needs. */
+  main {
+    max-width: 32rem;
+    padding: 22px 24px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(10px);
+  }
   .brand {
     font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
     color: #00f0ff; margin-bottom: 18px;
@@ -220,12 +242,17 @@ function lockedOut(status, heading, detail, headers = {}, extra = "") {
 </style>
 </head>
 <body>
+<canvas class="backdrop" id="backdrop" aria-hidden="true"></canvas>
 <main>
   <div class="brand">Agasa</div>
   <h1>${escapeHtml(heading)}</h1>
   <p>${escapeHtml(detail)}</p>
   ${extra}
 </main>
+<script type="module">
+  import { createEvilEye } from '/js/evil-eye.js';
+  createEvilEye(document.getElementById('backdrop'));
+</script>
 </body>
 </html>`;
 
