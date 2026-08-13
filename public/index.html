@@ -3,121 +3,59 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#080b10" />
+<meta name="theme-color" content="#000000" />
 <title>Agasa</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g' cx='38%25' cy='34%25'%3E%3Cstop offset='0' stop-color='%23a9a8ff'/%3E%3Cstop offset='.55' stop-color='%237c7bff'/%3E%3Cstop offset='1' stop-color='%2346a98c'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='11' fill='url(%23g)'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='%23ffffff'/%3E%3C/svg%3E" />
 
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Literata:opsz,wght@7..72,300..650&display=swap" />
+<style>
+  /* The page's black lives on the root only. A background on body as well
+     would paint over anything sitting at a negative z-index — which is
+     exactly where the eye is. */
+  html {
+    height: 100%;
+    background: #000000;
+  }
 
-<link rel="stylesheet" href="/styles/tokens.css" />
-<link rel="stylesheet" href="/styles/app.css" />
+  body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #ffffff;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* The eye is the page's ground, so it sits behind everything and takes
+     no pointer events; anything built on top just stacks above it. */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+</style>
 </head>
 <body>
 
-<canvas class="ambient" id="ambient" aria-hidden="true"></canvas>
+<canvas class="backdrop" id="backdrop" aria-hidden="true"></canvas>
 
-<a class="skip" href="#composer">Skip to composer</a>
+<script type="module">
+  import { createEvilEye } from '/js/evil-eye.js';
 
-<div class="app">
-
-  <aside class="rail" id="rail" data-open="false" aria-label="Sessions">
-    <div class="rail__head">
-      <div class="brand">Agasa <span>console</span></div>
-      <button type="button" class="btn btn--ghost rail-toggle" id="railClose" aria-label="Close sessions">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-
-    <div style="padding:0 12px 4px">
-      <button type="button" class="btn btn--wide" id="newSession">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        New session
-      </button>
-    </div>
-
-    <div class="rail__label" id="sessionsLabel">Sessions</div>
-    <div class="rail__scroll" id="sessions" role="list" aria-labelledby="sessionsLabel"></div>
-
-    <div class="rail__foot">
-      <button type="button" class="btn btn--wide btn--ghost" id="openPalette">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-        Commands <kbd id="paletteKey">Ctrl K</kbd>
-      </button>
-    </div>
-  </aside>
-
-  <button type="button" class="scrim-rail" id="railScrim" data-open="false" aria-label="Close sessions" tabindex="-1"></button>
-
-  <main class="main">
-    <div class="topbar">
-      <button type="button" class="btn btn--ghost rail-toggle" id="railOpen" aria-label="Open sessions" aria-controls="rail" aria-expanded="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <div class="topbar__title" id="threadTitle">New session</div>
-      <button type="button" class="btn btn--ghost" id="themeToggle" aria-label="Switch theme">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
-      </button>
-    </div>
-
-    <div class="workspace" id="workspace">
-      <div class="thread" id="thread" role="log" aria-label="Conversation" aria-busy="false">
-        <div class="thread__inner" id="threadInner"></div>
-      </div>
-
-      <section class="stage" id="stage" data-mode="hidden" aria-label="View stage" aria-hidden="true">
-        <header class="stage__head">
-          <div class="stage__title"></div>
-          <button type="button" class="btn btn--ghost stage__mode" aria-label="Expand to full width">full</button>
-          <button type="button" class="btn btn--ghost stage__close" aria-label="Close the view stage">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </header>
-        <div class="stage__body"></div>
-      </section>
-    </div>
-
-    <div class="dock">
-      <div class="slash" id="slash" data-open="false"></div>
-      <div class="dock__inner">
-        <div class="composer" id="composer">
-          <label class="sr-only" for="input">Message Agasa</label>
-          <textarea id="input" rows="1" placeholder="Ask anything, or / for commands"
-                    autocomplete="off" spellcheck="true"></textarea>
-          <button type="button" class="send" id="send" data-ready="false" disabled aria-label="Send message">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="sendIcon"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-          </button>
-        </div>
-        <div class="status" id="status">
-          <canvas class="status__orb" id="orb" width="18" height="18" aria-hidden="true"></canvas>
-        </div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<div class="palette" id="palette" data-open="false" role="dialog" aria-modal="true" aria-label="Command palette">
-  <div class="palette__panel">
-    <div class="palette__field">
-      <label class="sr-only" for="paletteInput">Search commands</label>
-      <input id="paletteInput" type="text" placeholder="Type a command…" autocomplete="off" spellcheck="false" />
-    </div>
-    <div class="palette__list" role="listbox" aria-label="Commands"></div>
-  </div>
-</div>
-
-<div class="dialog" id="dialog" data-open="false" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
-  <div class="dialog__panel">
-    <h2 class="dialog__title" id="dialogTitle"></h2>
-    <div class="dialog__body prose"></div>
-    <div class="dialog__foot"></div>
-  </div>
-</div>
-
-<div class="toast" id="toast" data-show="false" role="status"></div>
-<p class="sr-only" id="announce" role="status" aria-live="polite"></p>
-
-<script type="module" src="/js/main.js"></script>
+  createEvilEye(document.getElementById('backdrop'), {
+    eyeColor: '#ffffff',
+    intensity: 1.1,
+    pupilSize: 0.1,
+    irisWidth: 0.7,
+    glowIntensity: 0.2,
+    scale: 0.6,
+    noiseScale: 1.3,
+    pupilFollow: 0,
+    flameSpeed: 0.7,
+    backgroundColor: '#000000',
+  });
+</script>
 </body>
 </html>
