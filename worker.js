@@ -18,15 +18,20 @@ export default {
       const ip = request.headers.get("cf-connecting-ip") || "unknown";
       const { success } = await env.LOGIN_LIMITER.limit({ key: ip });
       if (!success) {
-        return new Response("Too many attempts. Try again in a minute.", {
-          status: 429,
-        });
+        return lockedOut(
+          429,
+          "Too many attempts",
+          "Wait a minute, then reload the page.",
+        );
       }
 
-      return new Response("Authentication required.", {
-        status: 401,
-        headers: { "WWW-Authenticate": 'Basic realm="Agasa", charset="UTF-8"' },
-      });
+      return lockedOut(
+        401,
+        "This console is private",
+        "Your browser should ask for a username and password. If no prompt " +
+          "appeared, reload the page.",
+        { "WWW-Authenticate": 'Basic realm="Agasa", charset="UTF-8"' },
+      );
     }
 
     const url = new URL(request.url);
@@ -46,6 +51,69 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+/**
+ * The pages you get before you are let in.
+ *
+ * These used to be one line of `text/plain`, which a browser renders as a bare
+ * sentence on a white page — indistinguishable, at a glance, from the site
+ * being broken. That is exactly how it was read: "I open the link and it's
+ * just grey." A locked door should look locked.
+ *
+ * Styles are inlined because every asset on this origin is behind the same
+ * check, so a stylesheet link from this page would 401 in turn. Kept to a few
+ * declarations rather than a copy of the token file, which would drift.
+ */
+function lockedOut(status, heading, detail, headers = {}) {
+  const body = `<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#080b10" />
+<title>Agasa</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: grid; place-items: center;
+    padding: 24px;
+    background: #080b10; color: #e6edf3;
+    font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    line-height: 1.6;
+  }
+  main { max-width: 32rem; }
+  .brand {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #00f0ff; margin-bottom: 18px;
+  }
+  h1 { margin: 0 0 10px; font-size: 17px; font-weight: 600; }
+  p { margin: 0; font-size: 13px; color: #7d8590; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Agasa</div>
+  <h1>${escapeHtml(heading)}</h1>
+  <p>${escapeHtml(detail)}</p>
+</main>
+</body>
+</html>`;
+
+  return new Response(body, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      ...headers,
+    },
+  });
+}
+
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
 
 const SYSTEM_PROMPT =
   "You are Agasa, a personal assistant that runs the interface it is speaking " +
