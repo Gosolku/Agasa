@@ -8,33 +8,37 @@ import { recordError, recentErrors } from "./src/telemetry.js";
 
 export default {
   async fetch(request, env) {
-    const expected = "Basic " + btoa(`agasa:${env.SITE_PASSWORD}`);
-    const provided = request.headers.get("Authorization") || "";
-    const authorized = constantTimeEqual(provided, expected);
+    const url = new URL(request.url);
 
-    if (!authorized) {
-      // Only failed attempts consume the rate limit — legit repeat visits
-      // (browser resending valid credentials on every asset) are unaffected.
-      const ip = request.headers.get("cf-connecting-ip") || "unknown";
-      const { success } = await env.LOGIN_LIMITER.limit({ key: ip });
-      if (!success) {
-        return lockedOut(
-          429,
-          "Too many attempts",
-          "Wait a minute, then reload the page.",
-        );
-      }
-
-      return lockedOut(
-        401,
-        "This console is private",
-        "Your browser should ask for a username and password. If no prompt " +
-          "appeared, reload the page.",
-        { "WWW-Authenticate": 'Basic realm="Agasa", charset="UTF-8"' },
-      );
+    // The only pair of routes reachable without credentials.
+    if (url.pathname === "/login") {
+      if (request.method === "GET") return loginPage(url);
+      if (request.method === "POST") return handleLogin(request, env, url);
+      return new Response("Method not allowed.", { status: 405 });
     }
 
-    const url = new URL(request.url);
+    const authorized =
+      (await hasSession(request, env)) || hasBasicAuth(request, env);
+
+    if (!authorized) {
+      // Anything under /api keeps the Basic challenge: those callers are
+      // scripts and curl, which handle a 401 and have no use for a form.
+      if (url.pathname.startsWith("/api/")) {
+        const ip = request.headers.get("cf-connecting-ip") || "unknown";
+        const { success } = await env.LOGIN_LIMITER.limit({ key: ip });
+        if (!success) {
+          return lockedOut(429, "Too many attempts", "Wait a minute, then retry.");
+        }
+        return lockedOut(401, "This console is private", "Credentials required.", {
+          "WWW-Authenticate": 'Basic realm="Agasa", charset="UTF-8"',
+        });
+      }
+
+      // A browser gets a page it can actually see. Firefox-family browsers
+      // may decline to raise the Basic prompt at all, which leaves the user
+      // looking at an empty viewport with no way in and nothing to read.
+      return Response.redirect(new URL("/login", url).toString(), 302);
+    }
     if (url.pathname === "/api/chat" && request.method === "POST") {
       return handleChat(request, env);
     }
@@ -52,6 +56,109 @@ export default {
   },
 };
 
+/* ── the door ──────────────────────────────────────────────────── */
+
+/*
+ * There are two ways in, and they exist for two different callers.
+ *
+ * HTTP Basic is kept for curl, the API and anything scripted: those callers
+ * already know how to answer a 401 and a form would be in their way.
+ *
+ * Browsers get a form and a cookie instead, because Basic's prompt is a
+ * browser-chrome dialog and not every browser raises one. Zen renders an empty
+ * viewport and never asks, which leaves the site indistinguishable from broken
+ * — no prompt, no page, no explanation. A door nobody can find is not
+ * security.
+ *
+ * The cookie is the expiry plus an HMAC of it, keyed on the site password. It
+ * carries no secret, cannot be forged without the password, and stops being
+ * valid on its own — so signing out everywhere is a matter of changing the
+ * password, which already invalidates every signature ever issued.
+ */
+
+const SESSION_COOKIE = "agasa_session";
+const SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
+
+function hasBasicAuth(request, env) {
+  const expected = "Basic " + btoa(`agasa:${env.SITE_PASSWORD}`);
+  return constantTimeEqual(request.headers.get("Authorization") || "", expected);
+}
+
+async function hasSession(request, env) {
+  const value = readCookie(request, SESSION_COOKIE);
+  if (!value) return false;
+
+  const [rawExpiry, signature] = String(value).split(".");
+  const expiry = parseInt(rawExpiry, 10);
+  if (!Number.isFinite(expiry) || expiry <= Math.floor(Date.now() / 1000)) {
+    return false;
+  }
+  return constantTimeEqual(signature || "", await signExpiry(env, expiry));
+}
+
+async function signExpiry(env, expiry) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(String(env.SITE_PASSWORD || "")),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`agasa.v1.${expiry}`),
+  );
+  let binary = "";
+  for (const byte of new Uint8Array(mac)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function readCookie(request, name) {
+  for (const part of (request.headers.get("Cookie") || "").split(";")) {
+    const [key, ...rest] = part.trim().split("=");
+    if (key === name) return rest.join("=");
+  }
+  return null;
+}
+
+async function handleLogin(request, env, url) {
+  // Every attempt counts, whether or not it succeeds — this is the one route
+  // where guessing is the attack.
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  const { success } = await env.LOGIN_LIMITER.limit({ key: ip });
+  if (!success) {
+    return lockedOut(429, "Too many attempts", "Wait a minute, then try again.");
+  }
+
+  let form;
+  try {
+    form = await request.formData();
+  } catch {
+    return loginPage(url, "That form arrived unreadable.");
+  }
+
+  const password = String(form.get("password") || "");
+  if (!constantTimeEqual(password, String(env.SITE_PASSWORD || ""))) {
+    return loginPage(url, "That password isn't right.");
+  }
+
+  const expiry = Math.floor(Date.now() / 1000) + SESSION_TTL;
+  const cookie = [
+    `${SESSION_COOKIE}=${expiry}.${await signExpiry(env, expiry)}`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+    `Max-Age=${SESSION_TTL}`,
+  ].join("; ");
+
+  return new Response(null, {
+    status: 303,
+    headers: { Location: new URL("/", url).toString(), "Set-Cookie": cookie },
+  });
+}
+
 /**
  * The pages you get before you are let in.
  *
@@ -64,7 +171,7 @@ export default {
  * check, so a stylesheet link from this page would 401 in turn. Kept to a few
  * declarations rather than a copy of the token file, which would drift.
  */
-function lockedOut(status, heading, detail, headers = {}) {
+function lockedOut(status, heading, detail, headers = {}, extra = "") {
   const body = `<!DOCTYPE html>
 <html lang="en-GB">
 <head>
@@ -89,6 +196,27 @@ function lockedOut(status, heading, detail, headers = {}) {
   }
   h1 { margin: 0 0 10px; font-size: 17px; font-weight: 600; }
   p { margin: 0; font-size: 13px; color: #7d8590; }
+  form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  input, button {
+    font: inherit; font-size: 13px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0d1117; color: #e6edf3;
+  }
+  input { flex: 1 1 12rem; min-width: 0; }
+  input[readonly] { color: #7d8590; flex: 0 1 8rem; }
+  input:focus-visible {
+    outline: none; border-color: rgba(0, 240, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.15);
+  }
+  button {
+    cursor: pointer; color: #00f0ff;
+    border-color: rgba(0, 240, 255, 0.45);
+    background: rgba(0, 240, 255, 0.10);
+  }
+  button:hover { border-color: #00f0ff; }
+  .error { margin-top: 12px; color: #f85149; }
 </style>
 </head>
 <body>
@@ -96,6 +224,7 @@ function lockedOut(status, heading, detail, headers = {}) {
   <div class="brand">Agasa</div>
   <h1>${escapeHtml(heading)}</h1>
   <p>${escapeHtml(detail)}</p>
+  ${extra}
 </main>
 </body>
 </html>`;
@@ -108,6 +237,33 @@ function lockedOut(status, heading, detail, headers = {}) {
       ...headers,
     },
   });
+}
+
+/**
+ * The way in for anything with a screen. A plain form, so it works wherever
+ * HTML works — no dependency on the browser agreeing to raise a dialog.
+ *
+ * The username field is fixed and read-only rather than absent: password
+ * managers need one to attach a saved credential to, and there has only ever
+ * been one account here.
+ */
+function loginPage(url, error) {
+  const form = `
+  <form method="POST" action="/login">
+    <input type="text" name="username" value="agasa" autocomplete="username" readonly />
+    <input type="password" name="password" placeholder="Password" autocomplete="current-password"
+           required autofocus aria-label="Password" />
+    <button type="submit">Enter</button>
+  </form>
+  ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}`;
+
+  return lockedOut(
+    error ? 401 : 200,
+    "This console is private",
+    "Sign in to continue.",
+    {},
+    form,
+  );
 }
 
 const escapeHtml = (text) =>
