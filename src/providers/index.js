@@ -7,6 +7,7 @@
 // protocol or front-end change.
 
 import { gemini } from "./gemini.js";
+import { cfAi } from "./cf-ai.js";
 
 /**
  * @typedef {object} Turn
@@ -35,18 +36,30 @@ import { gemini } from "./gemini.js";
 /** @type {Record<string, Provider>} */
 const PROVIDERS = {
   [gemini.id]: gemini,
+  [cfAi.id]: cfAi,
 };
 
 export const DEFAULT_PROVIDER = gemini.id;
 
 /**
- * Pick the active provider. `env.PROVIDER` lets a deploy switch without a code
- * change once there is more than one — an unknown value falls back rather than
- * failing, so a typo in a dashboard variable can't take the site down.
+ * Pick the active provider.
+ *
+ * Order: an explicit `env.PROVIDER` wins, then Workers AI if its binding is
+ * present, then Gemini. The binding is the signal because it cannot be there
+ * by accident — it is declared in wrangler.jsonc — and a deployment that has
+ * it has an allowance measured in thousands rather than in twenties.
+ *
+ * `env.PROVIDER` stays the override in both directions: set it to "gemini" on
+ * a deployment that has the AI binding and Gemini answers anyway, which is the
+ * escape hatch for "the small model got this wrong, use the good one". An
+ * unknown value falls back rather than failing, so a typo in a dashboard
+ * variable can't take the site down.
  */
 export function getProvider(env) {
-  const requested = (env && env.PROVIDER) || DEFAULT_PROVIDER;
-  return PROVIDERS[requested] || PROVIDERS[DEFAULT_PROVIDER];
+  const requested = env && env.PROVIDER;
+  if (requested && PROVIDERS[requested]) return PROVIDERS[requested];
+  if (cfAi.configured(env)) return PROVIDERS[cfAi.id];
+  return PROVIDERS[DEFAULT_PROVIDER];
 }
 
 export function listProviders() {

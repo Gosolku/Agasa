@@ -8,6 +8,12 @@
     "binding": "ASSETS",
     "run_worker_first": true
   },
+  // Workers AI. Inference runs on Cloudflare's own network, so there is no key
+  // to keep — the binding *is* the credential, and its presence is what
+  // src/providers/index.js uses to decide the provider is available at all.
+  "ai": {
+    "binding": "AI"
+  },
   "ratelimits": [
     {
       "name": "LOGIN_LIMITER",

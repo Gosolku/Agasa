@@ -87,11 +87,18 @@ const SYSTEM_PROMPT =
 // to resume after the browser answers — so the real budget is nearer seven
 // messages a day than twenty. Override with a DAILY_LIMIT variable in the
 // dashboard when the key moves to a paid tier.
+//
+// The ceiling is a property of whoever is answering, not of the Worker, so a
+// provider may declare its own and Gemini's 20 is only the fallback. An
+// explicit DAILY_LIMIT still beats both — it is the one number a deploy can
+// correct without a code change.
 const DEFAULT_DAILY_LIMIT = 20;
 
-function dailyLimit(env) {
+function dailyLimit(env, provider) {
   const configured = parseInt(env && env.DAILY_LIMIT, 10);
-  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_DAILY_LIMIT;
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  const declared = provider && provider.dailyLimit;
+  return Number.isFinite(declared) && declared > 0 ? declared : DEFAULT_DAILY_LIMIT;
 }
 
 const MAX_CHARS = 4000;
@@ -117,27 +124,27 @@ function pacificDateString(date = new Date()) {
   }).format(date);
 }
 
-async function getUsage(env) {
+async function getUsage(env, provider) {
   const day = pacificDateString();
   const used = parseInt((await env.USAGE.get(`usage:${day}`)) || "0", 10);
-  return { used, limit: dailyLimit(env), day };
+  return { used, limit: dailyLimit(env, provider), day };
 }
 
-async function adjustUsage(env, delta) {
+async function adjustUsage(env, delta, provider) {
   const day = pacificDateString();
   const key = `usage:${day}`;
   const used = Math.max(0, parseInt((await env.USAGE.get(key)) || "0", 10) + delta);
   // expire after 2 days — no cleanup needed, and tomorrow's key starts fresh
   await env.USAGE.put(key, String(used), { expirationTtl: 172800 });
-  return { used, limit: dailyLimit(env), day };
+  return { used, limit: dailyLimit(env, provider), day };
 }
 
-const incrementUsage = (env) => adjustUsage(env, 1);
+const incrementUsage = (env, provider) => adjustUsage(env, 1, provider);
 
 // A request Google rejected outright never produced a generation, so counting
 // it makes our estimate drift further from theirs with every failure —
 // exactly when an accurate number matters most.
-const refundUsage = (env) => adjustUsage(env, -1);
+const refundUsage = (env, provider) => adjustUsage(env, -1, provider);
 
 // Everything the front end needs to draw its status line before a first
 // message: who is answering, how much quota is left, what the assistant is
@@ -151,7 +158,7 @@ async function handleMeta(env) {
     model: provider.model,
     configured: provider.configured(env),
     available: listProviders(),
-    usage: await getUsage(env),
+    usage: await getUsage(env, provider),
     permissions: publicPermissions(),
     tools: toolManifest(),
   });
@@ -186,7 +193,7 @@ async function handleChat(request, env) {
     return sseError("The last turn has to be yours.");
   }
 
-  const usage = await incrementUsage(env);
+  const usage = await incrementUsage(env, provider);
   if (usage.used > usage.limit) {
     return sseError(
       `Daily limit reached — ${usage.limit} requests. It resets at midnight Pacific.`
@@ -245,7 +252,7 @@ async function handleToolResult(request, env) {
 
   const responses = mergeResponses(parked, body && body.results);
 
-  const usage = await incrementUsage(env);
+  const usage = await incrementUsage(env, provider);
   if (usage.used > usage.limit) {
     return sseError(
       `Daily limit reached — ${usage.limit} requests. It resets at midnight Pacific.`
@@ -380,7 +387,7 @@ async function* conversation({ provider, env, system, turns, signal, hops }) {
       } else if (event.type === "done") {
         finished = event.reason;
       } else if (event.type === "error") {
-        if (event.status === 429) await refundUsage(env);
+        if (event.status === 429) await refundUsage(env, provider);
         yield event;
         failed = true;
       } else {
@@ -442,7 +449,7 @@ async function* conversation({ provider, env, system, turns, signal, hops }) {
       // Everything ran here. Loop straight round without troubling the client.
       working = [...working, { role: "tool", responses: answered }];
       hop += 1;
-      await incrementUsage(env);
+      await incrementUsage(env, provider);
       continue;
     }
 

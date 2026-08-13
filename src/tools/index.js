@@ -21,6 +21,18 @@ export function toolDeclarations() {
   return [{ functionDeclarations: TOOLS.map((tool) => tool.declaration) }];
 }
 
+/**
+ * The same declarations with no vendor envelope around them — `{ name,
+ * description, parameters }`, which is the shape both Google and the
+ * OpenAI-style APIs are wrapping in the first place.
+ *
+ * A provider that isn't Gemini takes this and puts its own envelope on, rather
+ * than unpicking Google's. Still one list, still from the manifest.
+ */
+export function toolFunctions() {
+  return TOOLS.map((tool) => tool.declaration);
+}
+
 export function findTool(name) {
   return BY_NAME.get(name);
 }

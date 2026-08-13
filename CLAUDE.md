@@ -33,7 +33,10 @@ Nothing is pushed unless asked.
   passes through it, including asset fetches (`run_worker_first: true`).
 - `src/providers/` — the only files that know a vendor's wire format. Adding a
   provider is a file plus a registry entry; no route, protocol or front-end
-  change.
+  change. Two live: `gemini.js` and `cf-ai.js` (Cloudflare Workers AI).
+  Selection is `env.PROVIDER` first, then the AI binding if it is present,
+  then Gemini — so pinning the better model on a deployment that has both is a
+  dashboard variable, not a deploy.
 - `src/protocol.js` — our own SSE vocabulary: `meta / delta / tool_call /
   action / usage / done / error`. The browser never sees Google's shapes.
 - `public/js/manifest.json` — single source of truth for the tool layer.
@@ -58,9 +61,19 @@ Nothing is pushed unless asked.
 - **Tool names are whitelisted, never interpolated.** Module ids likewise —
   `import('./modules/' + id + '.js')` would turn a tool argument into a code
   path.
-- **Free tier is 20 requests/day and 5/minute**, confirmed against AI Studio
-  for Gemini 3.6 Flash (what `gemini-flash-latest` resolves to). Counted in KV
-  against a Pacific-midnight reset. Every tool hop is a separate request, so a
-  message that triggers a tool costs at least two and the usable budget is
-  nearer seven messages a day. This is the binding constraint on the whole
-  design — treat a saved request as the scarce resource, not tokens.
+- **Gemini's free tier is 20 requests/day and 5/minute**, confirmed against AI
+  Studio for Gemini 3.6 Flash (what `gemini-flash-latest` resolves to). Counted
+  in KV against a Pacific-midnight reset. Every tool hop is a separate request,
+  so a message that triggers a tool costs at least two and the usable budget is
+  nearer seven messages a day. Treat a saved request as the scarce resource,
+  not tokens.
+- **Workers AI is billed in Neurons, not requests.** The free allocation is
+  10,000 Neurons a day — a compute unit, not a request count. At the published
+  rates for `@cf/meta/llama-3.3-70b-instruct-fp8-fast` that is roughly 85
+  Agasa-shaped requests, which is the number `cfAi.dailyLimit` declares.
+  Anything that reads "10,000 requests/day" is a misreading of the pricing
+  page. There is also a 300 requests/minute cap, which the counter ignores.
+- **Not every Workers AI model can call a tool.** No Llama 3.1 model appears in
+  Cloudflare's function-calling catalogue, `-fast` variants included, and a
+  model that cannot call a tool cannot run this assistant. Check the catalogue
+  before changing `MODEL` in `src/providers/cf-ai.js`.
