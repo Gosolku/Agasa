@@ -16,6 +16,10 @@ const DEFAULTS = {
   pupilFollow:     0,
   flameSpeed:      0.7,
   backgroundColor: '#000000',
+  // Where the eye sits, in CSS pixels from the middle of the viewport, x
+  // rightward and y downward. A function is re-read on every resize, which is
+  // what lets the offset be stated in terms of the layout around it.
+  offset:          { x: 0, y: 0 },
 };
 
 function hexToVec3(hex) {
@@ -104,9 +108,11 @@ uniform float uPupilFollow;
 uniform float uFlameSpeed;
 uniform vec3 uEyeColor;
 uniform vec3 uBgColor;
+uniform vec2 uCenter;
 
 void main() {
   vec2 uv = (gl_FragCoord.xy * 2.0 - uResolution.xy) / uResolution.y;
+  uv -= uCenter;
   uv /= uScale;
   float ft = uTime * uFlameSpeed;
 
@@ -246,6 +252,7 @@ export function createEvilEye(canvas, options = {}) {
   const uTime = u('uTime');
   const uResolution = u('uResolution');
   const uMouse = u('uMouse');
+  const uCenter = u('uCenter');
 
   let w = 0, h = 0;
 
@@ -259,6 +266,13 @@ export function createEvilEye(canvas, options = {}) {
     canvas.height = h;
     gl.viewport(0, 0, w, h);
     gl.uniform3f(uResolution, w, h, w / h);
+
+    // The shader measures in half-viewport-heights, so a pixel offset is worth
+    // twice as much on a short window as on a tall one.
+    const off = typeof props.offset === 'function' ? props.offset() : props.offset;
+    gl.uniform2f(uCenter,
+      (2 * (off.x || 0)) / innerHeight,
+      (-2 * (off.y || 0)) / innerHeight);
   }
   addEventListener('resize', resize, { passive: true });
   resize();
