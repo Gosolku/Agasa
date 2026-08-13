@@ -1,21 +1,28 @@
 /* ═══ Agasa — design tokens ═══════════════════════════════════════
-   Palette: "slate & signal". Five carrying colours.
+   Palette: "terminal & signal". Five carrying colours.
 
-     ground   near-black. Not #000: a flat true black makes every raised
-              plane above it look like it is floating in nothing, and on OLED
-              it smears when the thread scrolls. This is black with just
-              enough blue left in it to hold an edge.
-     surface  raised planes: rail, composer, stage, code. Separated from
-              ground by about the smallest step that still reads as a step.
-     ink      warm bone rather than white, so long prose reads as paper
-              under lamplight instead of a backlit spreadsheet.
-     iris     the interactive colour. Focus, send, active session, links.
-     kelp     the *system truth* colour — connected, streaming, done. Only
-              ever appears in mono text and 1px indicators, never as fill,
-              which is what keeps status legible as status.
+     ground   near-black with the blue left in. Not #000: a flat true black
+              makes every raised plane above it look like it is floating in
+              nothing, and on OLED it smears when the thread scrolls.
+     surface  raised planes: rail, composer, stage, palette. Now *translucent*
+              — the ambient core runs behind the whole interface and these
+              panels are meant to sit on it like smoked glass, not hide it.
+              Anything carrying running text uses --surface-solid instead,
+              because prose over a moving field is a legibility problem, not
+              an aesthetic.
+     ink      the reading colour, cool rather than warm now that the ground
+              has gone colder.
+     iris     the interactive colour. Focus, send, active session, links, and
+              the colour the core takes while a reply streams.
+     kelp     the *system truth* colour — connected, done. Only ever appears
+              in mono text and 1px indicators, never as fill, which is what
+              keeps status legible as status.
 
    alert is semantic-only (errors). It is not part of the brand and never
    decorates anything.
+
+   Borders are white at low alpha rather than a mixed grey, so they hold
+   their weight over both the panels and the lit parts of the core.
 
    Type: Literata for conversation — a screen-reading serif with warmth and
    a bit of grit. IBM Plex Mono for everything the machine says about itself:
@@ -23,24 +30,29 @@
    ══════════════════════════════════════════════════════════════════ */
 
 :root {
-  --ground:     #07090b;
-  --surface:    #0d1014;
-  --surface-2:  #14181d;
-  --ink:        #e7e3db;
-  --iris:       #7c7bff;
-  --kelp:       #46a98c;
-  --alert:      #c7554f;
+  --ground:     #080b10;
+  --surface:       rgba(13, 17, 23, 0.75);
+  --surface-solid: #0d1117;
+  --surface-2:     #161b22;
+  --ink:        #e6edf3;
+  --iris:       #00f0ff;
+  --kelp:       #3fb950;
+  --alert:      #f85149;
 
-  --ink-dim:    #8d97a2;
-  --ink-faint:  #5a636d;
-  --line:       #1a1f25;
-  --line-bright:#272e36;
-  --iris-wash:  rgba(124, 123, 255, 0.13);
-  --iris-edge:  rgba(124, 123, 255, 0.42);
-  --kelp-wash:  rgba(70, 169, 140, 0.14);
-  --alert-wash: rgba(199, 85, 79, 0.13);
-  --scrim:      rgba(6, 10, 14, 0.72);
-  --shadow:     0 24px 60px -28px rgba(0, 0, 0, 0.9);
+  --ink-dim:    #7d8590;
+  --ink-faint:  #59626c;
+  --line:       rgba(255, 255, 255, 0.08);
+  --line-bright:rgba(255, 255, 255, 0.16);
+  --iris-wash:  rgba(0, 240, 255, 0.15);
+  --iris-edge:  rgba(0, 240, 255, 0.45);
+  --kelp-wash:  rgba(63, 185, 80, 0.14);
+  --alert-wash: rgba(248, 81, 73, 0.13);
+  --scrim:      rgba(3, 6, 10, 0.72);
+  --shadow:     0 24px 60px -28px rgba(0, 0, 0, 0.95);
+
+  /* One value, so every glass panel blurs the core by the same amount and
+     they read as one sheet of material at different sizes. */
+  --panel-blur: blur(12px);
 
   --conv: "Literata", Georgia, "Iowan Old Style", "Times New Roman", serif;
   --sys:  "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -60,7 +72,8 @@
   --stage-width: 42%;
 
   /* Motion is for state changes only: something arrived, something opened,
-     something is now connected. Nothing here loops or floats for effect. */
+     something is now connected. The ambient core is the one exception, and
+     it is behind everything and stands down under reduced-motion. */
   --quick: 120ms;
   --base:  200ms;
   --slow:  340ms;
@@ -73,19 +86,22 @@
 
 :root[data-theme="light"] {
   --ground:     #f0f1ee;
-  --surface:    #f8f8f5;
-  --surface-2:  #eceded;
+  --surface:       rgba(252, 252, 250, 0.75);
+  --surface-solid: #f8f8f5;
+  --surface-2:     #eceded;
   --ink:        #17212b;
-  --iris:       #4a48d0;
+  /* The accent has to survive on a pale ground, so it is the same cyan taken
+     down to where it can carry 4.5:1 against the surfaces. */
+  --iris:       #0a7f92;
   --kelp:       #2c7b64;
   --alert:      #a93b35;
 
   --ink-dim:    #5a6875;
   --ink-faint:  #8b98a4;
-  --line:       #dcdedb;
-  --line-bright:#c4c8c5;
-  --iris-wash:  rgba(74, 72, 208, 0.09);
-  --iris-edge:  rgba(74, 72, 208, 0.34);
+  --line:       rgba(20, 30, 40, 0.12);
+  --line-bright:rgba(20, 30, 40, 0.22);
+  --iris-wash:  rgba(10, 127, 146, 0.11);
+  --iris-edge:  rgba(10, 127, 146, 0.40);
   --kelp-wash:  rgba(44, 123, 100, 0.11);
   --alert-wash: rgba(169, 59, 53, 0.09);
   --scrim:      rgba(30, 36, 42, 0.42);

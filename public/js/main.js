@@ -5,6 +5,7 @@ import { load, save, newSession, titleFor } from './store.js';
 import { streamChat } from './stream.js';
 import { renderPart, updatePart } from './render.js';
 import { createOrb } from './orb.js';
+import { createAmbient } from './ambient.js';
 import { createStatus } from './status.js';
 import { createSlash } from './slash.js';
 import { createPalette } from './palette.js';
@@ -21,7 +22,7 @@ const el = {
   paletteKey: $('paletteKey'), themeToggle: $('themeToggle'),
   thread: $('thread'), threadInner: $('threadInner'), threadTitle: $('threadTitle'),
   composer: $('composer'), input: $('input'), send: $('send'), sendIcon: $('sendIcon'),
-  status: $('status'), orb: $('orb'), slash: $('slash'),
+  status: $('status'), orb: $('orb'), ambient: $('ambient'), slash: $('slash'),
   stage: $('stage'), dialog: $('dialog'),
   toast: $('toast'), announce: $('announce'),
 };
@@ -47,7 +48,19 @@ const persist = () => save(sessions);
 const telemetry = installTelemetry({ context: () => clientContext() });
 
 const orb = createOrb(el.orb);
-const status = createStatus({ root: el.status, orb });
+const ambient = createAmbient(el.ambient);
+
+/* The orb and the background are one indicator in two sizes, so they are fed
+   from a single place rather than left to be updated separately — a status
+   line saying "streaming" over a background still idling is worse than having
+   no background at all. createStatus only ever calls setState/retheme, so it
+   takes this in the orb's place and needs no knowledge of the second surface. */
+const indicators = {
+  setState(name) { orb.setState(name); ambient.setState(name); },
+  retheme() { orb.retheme(); ambient.retheme(); },
+};
+
+const status = createStatus({ root: el.status, orb: indicators });
 const dialog = createDialog(el.dialog);
 
 el.paletteKey.textContent = isApple ? '⌘ K' : 'Ctrl K';
@@ -111,7 +124,7 @@ function setTheme(next) {
   const ground = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim();
   const tag = document.querySelector('meta[name="theme-color"]');
   if (tag && ground) tag.setAttribute('content', ground);
-  if (orb) orb.retheme();
+  indicators.retheme();
 }
 
 try { setTheme(localStorage.getItem(THEME_KEY) || 'dark'); } catch { setTheme('dark'); }
